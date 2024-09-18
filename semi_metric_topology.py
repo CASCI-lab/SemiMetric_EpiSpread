@@ -41,7 +41,7 @@ def create_synthetic_network(G_metric, tau, mu, sigma):
     
     for idx, (u,v) in enumerate(semi_edges): 
         d_shortest_path = nx.shortest_path_length(G_metric, source=u, target=v, weight='distance')
-        d = s_values[idx]*G_closure_semi_metric[u][v]['metric_distance']
+        d = s_values[idx]*d_shortest_path
         p = 1./(d+1.) 
         newG.add_edge(u,v,**{'distance':d, 'proximity':p,'s_value':s_values[idx],'metric':False,'metric_distance':d_shortest_path})
     

@@ -2,13 +2,27 @@ from utils import*
 import numpy as np
 import random
 
-def initiate_configuration(seed,nodes):
+def initiate_configuration(seed, nodes):
     '''
     Set the infectious seed for the SI dynamics
+    
+    Parameters
+    ----------
+    seed : int
+        Node index of the seed.
+
+    nodes : list
+        All the nodes in the network
+
+    Returns
+    ----------
+    dict
+        State of each node in the network: Suscetible (0) or Infected (1).
+    
     '''
     
-    states={i:0 for i in nodes}
-    states[seed]=1
+    states = {i:0 for i in nodes}
+    states[seed] = 1
     
     return states
 
@@ -50,6 +64,26 @@ def update_inf_probabilities(beta, dt, out_neighbors, out_weights, probability_o
 def simulateSI(seed, beta, dt, network): 
     '''
     Simulate the SI dynamics considering a single seed of infection in a given network (DataFrame format)
+    
+    Parameters
+    ----------
+    seed : int
+        Node index of the seed.
+
+    beta : float
+        Contagion rate.
+
+    dt : float
+        Length of the discrete time step considered in the simulaitons
+    
+    network : Dataframe
+        Edgelist of the network as a Pandas dataframe.
+
+    Returns
+    ----------
+    dict
+        Times at which each node got infected-
+    
     '''
 
     #Initiate the dynamics
@@ -80,25 +114,51 @@ def simulateSI(seed, beta, dt, network):
             ninf+=1 ### updates the number of infected individuals in the population
         probability_of_infection=update_inf_probabilities(beta,dt,out_neighbors,out_weights,probability_of_infection,new_contagions) ### update the probability of infection of the remaining nodes
 
-    return time_of_infection ### return the dictionary with the times of infection of each node
+    return time_of_infection
 
 
-def get_si_results(network_name):
+def get_si_results(network_name, realizations, beta, dt, chi_values, verbose=False):
     '''
     Generate a dataframe with the SI simulation for multiple parameters.
+    
+    Parameters
+    ----------
+    network_name : str
+        Label of the network for simulations given by the city name.
+    
+    realizations : int
+        Number of outbreaks simulated for each infectious seed
+
+    beta : float
+        Contagion rate.
+
+    dt : float
+        Length of the discrete time step considered in the simulaitons
+    
+    chi_values : list
+        Sizes of the sparsified network. Fraction of semi-metric edges remaining in the network after sparsifying. chi=1 original network, chi=0 metric backbone
+    
+    verbose : bool (optional)
+        Set if simulation progress is printed to the screen.
+
+    Returns
+    ----------
+    Pandas Dataframe
+        SI simulation results where the last column corresponds to the times at which a given quantile of nodes (10%,20%,30%...) gets infected.
+    
     '''
 
     network_original=pd.read_csv('Data/network_with_semi_metric_topology_%s.csv'%network_name)
     metric_network=network_original[network_original['metric']==True]
     
-    realizations=30 ### Number of outbreaks simulated for each infectious seed
-    beta=0.5 ### Infectiousness parameter
-    dt=0.1 ### Duration of each time step
+    #realizations=30 ### Number of outbreaks simulated for each infectious seed
+    #beta=0.5 ### Infectiousness parameter
+    #dt=0.1 ### Duration of each time step
     nodes=node_list(network_original) #Compute nodes of the network
     results=[]
     seeds=random.choices(nodes,k=10) ### Set k different locations for the seeds. IMPORTANT: When comparing with other methods/sizes of the network, keep the same set of nodes as seeds for a fair comparison
     semi_metric_network=network_original[network_original['metric']==False].sort_values('s_value',ascending=True) ### All semi-metric edges sorted from the lowest to the highest distorsion values
-    chi_values = np.arange(0,1.01,0.05) ## chi controls the size of the sparsified network. Fraction of semi-metric edges remaining in the network after sparsifying. chi=1 original network, chi=0 metric backbone
+    #chi_values = np.arange(0,1.01,0.05) ## chi controls the size of the sparsified network. Fraction of semi-metric edges remaining in the network after sparsifying. chi=1 original network, chi=0 metric backbone
     
     for chi in chi_values: 
         sample_size=int(chi*len(semi_metric_network)) ### Number of semi-metric edges included
@@ -111,7 +171,8 @@ def get_si_results(network_name):
                 time_distribution=list(simulateSI(seed,beta,dt,network_used).values()) ## get a dictionary with the times of infection of all nodes
                 results.append(tuple([beta,chi,network_name,seed,real,[np.quantile(time_distribution,x).round(1) for x in np.arange(0.1,1.01,0.1)]])) ### append for each realization and seed
                 real+=1
-            print('Chi %.2f, Seed %d is done'%(chi,seed))
+            if verbose:
+                print('Chi %.2f, Seed %d is done'%(chi,seed))
     
     # Create a dataframe with the parameters and the result (last column). Last column corresponds to a list of times at which a given quantile of nodes (10%,20%,30%...) gets infected.
     df_results=pd.DataFrame(results,columns=['beta','size','network','seed','realization','times']) 
