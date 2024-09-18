@@ -3,7 +3,7 @@ import numpy as np
 import distanceclosure as dc
 from distanceclosure.dijkstra import all_pairs_dijkstra_path_length
 
-def create_synthetic_network(G_metric, G_closure, tau, mu, sigma):
+def create_synthetic_network(G_metric, tau, mu, sigma):
     '''
     Create a synthetic network with tunable size of the metric backbone and features of the semi-metric distortion distribution
     
@@ -11,9 +11,6 @@ def create_synthetic_network(G_metric, G_closure, tau, mu, sigma):
     ----------
     G_metric : NetworkX graph
         The metric backbone of a network. It should be a connected graph and all the edges should constitute the shortest path between their ends.
-
-    G_closure : NetworkX graph
-        The metric closure of a network. A graph containing the length of the shortest path connecting every single pair of nodes in the network.
 
     tau : float
         The relative size of the metric backbone of the synthetic network to be created. It should be between 0 and 1.
@@ -30,21 +27,23 @@ def create_synthetic_network(G_metric, G_closure, tau, mu, sigma):
     '''
 
     newG=G_metric.copy()
+    G_closure = nx.complete_graph(G_metric.nodes(), create_using=nx.Graph) # Assumes the network is a single component
     G_closure.remove_edges_from(G_metric.edges())
     G_closure_semi_metric=G_closure.copy() 
 
     E = int((1./tau - 1.)*G_metric.number_of_edges()) 
     semi_edges=list(G_closure_semi_metric.edges()) 
-    np.random.shuffle(semi_edges) 
+    np.random.shuffle(semi_edges)
     semi_edges=semi_edges[:E] 
 
     s_values = np.random.lognormal(mean=mu, sigma=sigma, size=len(semi_edges)) 
     s_values=s_values+1 #### Semi-metric distortion of semi-metric edges should be above 1
     
     for idx, (u,v) in enumerate(semi_edges): 
+        d_shortest_path = nx.shortest_path_length(G_metric, source=u, target=v, weight='distance')
         d = s_values[idx]*G_closure_semi_metric[u][v]['metric_distance']
         p = 1./(d+1.) 
-        newG.add_edge(u,v,**{'distance':d, 'proximity':p,'s_value':s_values[idx],'metric':False,'metric_distance':G_closure_semi_metric[u][v]['metric_distance']})
+        newG.add_edge(u,v,**{'distance':d, 'proximity':p,'s_value':s_values[idx],'metric':False,'metric_distance':d_shortest_path})
     
     return newG
 
@@ -69,7 +68,6 @@ def semi_metric_topology(gdf):
     G = nx.from_pandas_edgelist(gdf, source='source', target='target', edge_attr=['distance', 'proximity'])
 
     # Remove self-loops (just in case)
-    print('Remove self-loops')
     G.remove_edges_from(list(nx.selfloop_edges(G)))
 
     B, svals = dc.metric_backbone(G, weight='distance', distortion=True)
@@ -159,3 +157,49 @@ def _old_compute_backbone(name,df): ### Function to compute the backbone of a gi
     dfG = nx.to_pandas_edgelist(G)
 
     return dfG ### return dataframe with the network and additional information regarding whether edges are metric or not and their associated semi-metric distortionreturn UG
+
+
+def _old_create_synthetic_network(G_metric, G_closure, tau, mu, sigma):
+    '''
+    Create a synthetic network with tunable size of the metric backbone and features of the semi-metric distortion distribution
+    
+    Parameters
+    ----------
+    G_metric : NetworkX graph
+        The metric backbone of a network. It should be a connected graph and all the edges should constitute the shortest path between their ends.
+
+    G_closure : NetworkX graph
+        The metric closure of a network. A graph containing the length of the shortest path connecting every single pair of nodes in the network.
+
+    tau : float
+        The relative size of the metric backbone of the synthetic network to be created. It should be between 0 and 1.
+
+    mu, sigma : float
+        Parameters of the semi-metric edge distortion log-normal distribution.
+
+
+    Returns
+    ----------
+    NetworkX graph
+        The synthetic network
+
+    '''
+
+    newG=G_metric.copy()
+    G_closure.remove_edges_from(G_metric.edges())
+    G_closure_semi_metric=G_closure.copy() 
+
+    E = int((1./tau - 1.)*G_metric.number_of_edges()) 
+    semi_edges=list(G_closure_semi_metric.edges()) 
+    np.random.shuffle(semi_edges) 
+    semi_edges=semi_edges[:E] 
+
+    s_values = np.random.lognormal(mean=mu, sigma=sigma, size=len(semi_edges)) 
+    s_values=s_values+1 #### Semi-metric distortion of semi-metric edges should be above 1
+    
+    for idx, (u,v) in enumerate(semi_edges): 
+        d = s_values[idx]*G_closure_semi_metric[u][v]['metric_distance']
+        p = 1./(d+1.) 
+        newG.add_edge(u,v,**{'distance':d, 'proximity':p,'s_value':s_values[idx],'metric':False,'metric_distance':G_closure_semi_metric[u][v]['metric_distance']})
+    
+    return newG
